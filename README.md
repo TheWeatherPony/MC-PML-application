@@ -1,0 +1,1 @@
+This is an implementation of Partial Modification Loader's application API for the Java game Minecraft. This is not a part of PML - it merely functions as a bridge between PML and Minecraft for PML mod/plugin usage.
