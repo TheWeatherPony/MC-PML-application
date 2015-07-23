@@ -85,30 +85,21 @@ public abstract class MinecraftPML<self extends MinecraftPML<self>> extends PMLS
 		private final IPMLPluginManagement manager;
 		@Override
 		public boolean stateUpdate(LoadUpdate state){
-			if(state instanceof ILoadStateListener.ClassLoaderConstructionUpdate){
-				ILoadStateListener.ClassLoaderConstructionUpdate update = (ILoadStateListener.ClassLoaderConstructionUpdate)state;
-				if(update.loader.getClass().equals(update.finishedConstructor)){
-					if("net.minecraft.launchwrapper.LaunchClassLoader".equals(update.finishedConstructor.getName())){
+			if(state instanceof ILoadStateListener.ThreadChangeContextClassLoaderUpdate){
+				ILoadStateListener.ThreadChangeContextClassLoaderUpdate update = (ILoadStateListener.ThreadChangeContextClassLoaderUpdate)state;
+				if(update.loader.getClass().equals(update.loader)){
+					if("net.minecraft.launchwrapper.LaunchClassLoader".equals(update.loader.getClass().getName())){
 						manager.applicationRecommendedLoadTime(update.loader);
 						return false;//no longer listen - no longer any need
 					}
 				}
 			}
-			/*if(state instanceof ILoadStateListener.ThreadChangeContextClassLoaderUpdate){
-				ILoadStateListener.ThreadChangeContextClassLoaderUpdate change = (ILoadStateListener.ThreadChangeContextClassLoaderUpdate)state;
-				if("net.minecraft.launchwrapper.LaunchClassLoader".equals(change.loader.getClass().getName())){
-					manager.applicationRecommendedLoadTime(change.loader);
-					System.err.println("MCPML - found load point");
-					return false;//no longer listen - no longer any need
-				}
-			}*/
 			return true;
 		}
 		public boolean isLaunchClassLoader(ClassLoader loader){
 			Class clazz = loader.getClass();
 			while(!clazz.equals(Object.class)){
-				if(clazz.getName().equals("net.minecraft.launchwrapper.LaunchClassLoader")){
-					//break;
+				if("net.minecraft.launchwrapper.LaunchClassLoader".equals(clazz.getName())){
 					return true;
 				}
 				clazz = clazz.getSuperclass();
