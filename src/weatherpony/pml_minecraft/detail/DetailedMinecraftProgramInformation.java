@@ -3,6 +3,7 @@ package weatherpony.pml_minecraft.detail;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.util.regex.Pattern;
 
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -15,11 +16,8 @@ import weatherpony.pml_minecraft.MinecraftProgramInformation;
 public class DetailedMinecraftProgramInformation extends MinecraftProgramInformation{
 	DetailedMinecraftProgramInformation(){
 		super();
-			ClassLoader myLoader = DetailedMinecraftPML.class.getClassLoader();
-			Class loadFocuser = PMLLoadFocuser.class;
-			ClassLoader loadLoader = loadFocuser.getClassLoader();
-			ClassLoader loadLoaderParent = loadLoader.getParent();
-		String[] args = PMLLoadFocuser.agentargs.split("\\s");
+		String pattern = "[:\\s]";
+		String[] args = PMLLoadFocuser.agentargs.split(pattern);
 		final OptionParser parser = new OptionParser();
         parser.allowsUnrecognizedOptions();
 		final OptionSpec<String> profileName = parser.accepts("MCSide", "The game side we launched with").withRequiredArg();
@@ -45,16 +43,20 @@ public class DetailedMinecraftProgramInformation extends MinecraftProgramInforma
 	}
 	MCSide side;
 	@Override
-	public IEnviornment<MCSide> getApplicationEnviornment() {
+	public IEnviornment<MCSide> getApplicationEnviornment(){
 		return this.side;
 	}
 	private final VersionHelper versionHelper;
 	@Override
-	public String minecraftVersionNumber() {
+	public String minecraftVersionNumber(){
 		return versionHelper.MCVersion;
 	}
 	@Override
-	public String minecraftCoreVersionNumber() {
+	public String minecraftCoreVersionNumber(){
 		return versionHelper.MCVersionRoot;
+	}
+	@Override
+	public boolean isSnapshot(){
+		return versionHelper.snapshot;
 	}
 }

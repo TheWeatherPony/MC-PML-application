@@ -2,7 +2,6 @@ package weatherpony.pml_minecraft;
 
 import java.lang.reflect.Field;
 
-import net.minecraft.launchwrapper.LaunchClassLoader;
 import weatherpony.pml.implementorapi.IEnviornmentASMSetup;
 import weatherpony.pml.implementorapi.IPMLModLocator;
 import weatherpony.pml.implementorapi.IPMLPluginManagement;
@@ -87,7 +86,7 @@ public abstract class MinecraftPML<self extends MinecraftPML<self>> extends PMLS
 		public boolean stateUpdate(LoadUpdate state){
 			if(state instanceof ILoadStateListener.ThreadChangeContextClassLoaderUpdate){
 				ILoadStateListener.ThreadChangeContextClassLoaderUpdate update = (ILoadStateListener.ThreadChangeContextClassLoaderUpdate)state;
-				if(update.loader.getClass().equals(update.loader)){
+				if(update.thread.equals(Thread.currentThread())){
 					if("net.minecraft.launchwrapper.LaunchClassLoader".equals(update.loader.getClass().getName())){
 						manager.applicationRecommendedLoadTime(update.loader);
 						return false;//no longer listen - no longer any need
@@ -107,4 +106,17 @@ public abstract class MinecraftPML<self extends MinecraftPML<self>> extends PMLS
 			return false;
 		}
 	}
+	@Override
+	public void notifyOfEndCoreLoad(){
+		String startClass = System.getProperty(PMLLoadFocuser.pmlMainClassNameSystemProperty);
+		if(startClass.equals("net.minecraft.launchwrapper.Launch"))//LaunchWrapper setup - handled with LoadUpdates
+			return;
+		if(startClass.equals("GradleStart") || startClass.equals("GradleStartServer"))//Forge development setup - uses the LaunchWrapper setup underneath
+			return;
+		//I don't know of any other setups that either are or lead to the LaunchWrapper setup at the time of this coding
+		
+		//the LaunchWrapper isn't pressent - time to trigger the mods to load
+		this.recommendedLoadTime_notLaunchWrapper();
+	}
+	protected abstract void recommendedLoadTime_notLaunchWrapper();
 }

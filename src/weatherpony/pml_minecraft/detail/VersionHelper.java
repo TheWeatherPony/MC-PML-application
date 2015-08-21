@@ -1,7 +1,6 @@
 package weatherpony.pml_minecraft.detail;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -17,14 +16,15 @@ import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.LabelNode;
 import org.objectweb.asm.tree.LdcInsnNode;
+import org.objectweb.asm.tree.LineNumberNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.TypeInsnNode;
 import org.objectweb.asm.tree.VarInsnNode;
 
-import weatherpony.pml.launch.PMLRoot;
-
 public class VersionHelper {
-	static final String regex = ".*[0-9]+\\.[0-9]+";//<anything>#.# //yes, it does actually need that ".*". I tried without it and crashed. Silly Java not following the full rules of regex...
+	static final String regex1 = ".*[0-9]+\\.[0-9]+";
+	static final String regex2 = ".*[0-9]+w[0-9]+[a-zA-Z]";
 	//static final String clientClass = "net/minecraft/client/Minecraft.class";
 		//the client class is obfuscated. got to try and find it
 	static final String clientMainClass = "net/minecraft/client/main/Main.class";
@@ -66,7 +66,7 @@ public class VersionHelper {
 		}else{
 			client = true;
 			String clientClass = null;
-			
+			searching:
 			try {
 				ClassReader cr = new ClassReader(Thread.currentThread().getContextClassLoader().getResourceAsStream(clientMainClass));
 				ClassNode main = new ClassNode();
@@ -90,7 +90,7 @@ public class VersionHelper {
 						if(ldc.cst instanceof String){
 							if(((String)ldc.cst).equals("Client thread")){
 								foundMarker = true;
-								insnnode = insnnode.getNext().getNext();//should be the third to last. but doing it this way in case they change stuff...
+								insnnode = insnnode.getNext().getNext();
 								break;
 							}
 						}
@@ -98,15 +98,33 @@ public class VersionHelper {
 					insnnode = insnnode.getPrevious();
 				}
 				/*
-				818  ldc_w <String "Client thread"> [263]
-			    821  invokevirtual java.lang.Thread.setName(java.lang.String) : void [266]
-			    824  aload 34
-			    826  invokevirtual net.minecraft.client.Minecraft.run() : void [269]
-			    829  return
+					LDC "Client thread">
+			    	INVOKEVIRTUAL java/lang.Thread/setName(Ljava/lang/String)V
+			    	aload 34
+			    	invokevirtual net.minecraft.client.Minecraft.run() : void 
+			    	return
 			    */
+				/*
+					LDC "Client thread"
+					INVOKEVIRTUAL java/lang/Thread.setName (Ljava/lang/String;)V
+					NEW net/minecraft/client/Minecraft
+					DUP
+					ALOAD 42
+					INVOKESPECIAL net/minecraft/client/Minecraft.<init> (Lnet/minecraft/client/main/GameConfiguration;)V
+					INVOKEVIRTUAL net/minecraft/client/Minecraft.run ()V
+				 */
 				if(foundMarker){
 					if(insnnode instanceof LabelNode){
-						insnnode = insnnode.getNext().getNext();
+						insnnode = insnnode.getNext();
+						if(insnnode instanceof LineNumberNode)
+							insnnode = insnnode.getNext();	
+					}
+					if(insnnode instanceof TypeInsnNode){
+						if(insnnode.getOpcode() == Opcodes.NEW){
+							TypeInsnNode test = (TypeInsnNode)insnnode;
+							clientClass = test.desc+".class";
+							break searching;
+						}
 					}
 					if(insnnode instanceof VarInsnNode){
 						int variableNumber = ((VarInsnNode)insnnode).var;
@@ -165,30 +183,36 @@ public class VersionHelper {
 			ClassReader cr = new ClassReader(Thread.currentThread().getContextClassLoader().getResourceAsStream(sidedClass));
 			MCVersionFinder finder = new MCVersionFinder();
 			cr.accept(finder, ClassReader.EXPAND_FRAMES | ClassReader.SKIP_DEBUG);
-			foundVersionString = finder.getVersionString();
+			foundVersionString = finder.getVersionString(client);
 		} catch (Exception e) {
-			throw new RuntimeException();
+			throw new RuntimeException(e);
 		}
 		
-		this.MCVersion = client ? //"Minecraft #.#<.#>" ?
-				foundVersionString.split("\\s")[1]//split it at the space character, and take the second part
-				: foundVersionString;
-				
-		final String[] mcVsplits = this.MCVersion.split("\\.");
-		String mcvroot = "";
-		{
-			String add = "";
-			String dot = ".";
-			for(int cur=0;cur<ROOTSIZE && cur<mcVsplits.length;cur++){
-				mcvroot += add;
-				add = dot;
-				mcvroot += mcVsplits[cur];
+		this.MCVersion = foundVersionString;
+		if(this.MCVersion.matches(regex2)){
+			this.snapshot = true;
+			this.MCVersionRoot = this.MCVersion;
+		}else{
+			this.snapshot = false;
+			final String[] mcVsplits = this.MCVersion.split("\\.");
+			String mcvroot = "";
+			{
+				String add = "";
+				String dot = ".";
+				for(int cur=0;cur<ROOTSIZE && cur<mcVsplits.length;cur++){
+					mcvroot += add;
+					add = dot;
+					mcvroot += mcVsplits[cur];
+				}
 			}
+			this.MCVersionRoot = mcvroot;
 		}
-		this.MCVersionRoot = mcvroot;
+		
+		System.out.println("PML: found Minecraft version - "+MCVersion+(this.snapshot ? " (snapshot)" : ""));
 	}
 	public final String MCVersion;
 	public final String MCVersionRoot;
+	public final boolean snapshot;
 	
 	static class MCVersionFinder extends ClassVisitor{
 		public MCVersionFinder() {
@@ -197,16 +221,21 @@ public class VersionHelper {
 		}
 		MCVersionFinder_MethodVisitor methodvisitorinstance;
 		List<String> maybes = new ArrayList();
-		String getVersionString(){
+		String getVersionString(boolean client){
 			String ret = null;
 			for(String each : maybes){
 				if(each.equals("##0.00"))//the decimal format from Minecraft.class
 					continue;//ignore that one.
+				if(client){//possibly "Minecraft #.#<.#>"
+					String[] split = each.split("\\s");
+					if(split.length == 2)
+						each = split[1];
+				}
 				if(ret == null){
 					ret = each;
 				}else{
 					if(!ret.equals(each))
-						throw new RuntimeException();
+						throw new RuntimeException("Couldn't figure out Minecraft version number: came across \""+ret+"\" and \""+each+'"');
 				}
 			}
 			return ret;
@@ -251,7 +280,7 @@ public class VersionHelper {
 			public void visitLdcInsn(Object cst) {
 		        if(cst instanceof String){
 		        	String load = (String)cst;
-		        	if(load.matches(regex))
+		        	if(load.matches(regex1) || load.matches(regex2))
 		        		this.parent.addMaybe(load);
 		        }
 		    }

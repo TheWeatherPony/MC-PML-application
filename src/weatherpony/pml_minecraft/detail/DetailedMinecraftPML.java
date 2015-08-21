@@ -20,9 +20,15 @@ public class DetailedMinecraftPML extends MinecraftPML<DetailedMinecraftPML>{
 	public DetailedMinecraftPML(){
 		super(new DetailedMinecraftProgramInformation());
 	}
-	
+	//I'll remove this and refactor as much as I need to in order to compensate, if I find that someone's accessing this 
+	private IPMLPluginManagement manager;
 	@Override
 	public void givePluginManager(IPMLPluginManagement manager){
 		PMLLoadFocuser.registerLoadStateListener(new MCLoadListener(manager));
+	}
+
+	@Override
+	protected void recommendedLoadTime_notLaunchWrapper() {
+		this.manager.applicationRecommendedLoadTime(Thread.currentThread().getContextClassLoader());
 	}
 }
